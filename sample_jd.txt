@@ -1,0 +1,18 @@
+Senior Java Backend Engineer
+Acme Technologies, Bengaluru (Hybrid)
+
+About the role
+We are looking for a Senior Java Backend Engineer to design, build and scale the services that power our payments platform.
+
+Requirements
+- 5+ years of professional experience building backend systems in Java
+- Strong hands-on experience with Spring Boot and RESTful APIs
+- Solid understanding of microservices architecture and distributed systems
+- Proficiency in SQL and PostgreSQL, including query optimisation
+- Experience with Docker and Git-based workflows
+- Bachelor's degree in Computer Science or a related field
+
+Preferred
+- Experience with Kubernetes and AWS
+- Knowledge of Kafka or other messaging systems
+- Familiarity with CI/CD pipelines and Redis
