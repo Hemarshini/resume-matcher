@@ -19,7 +19,7 @@ class Embedder:
         self.model, self.name, self.cache = None, "TF-IDF (fallback)", {}
         try:
             from sentence_transformers import SentenceTransformer
-            self.model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+            self.model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu")
             self.name = "all-MiniLM-L6-v2"
         except Exception as exc:  # offline / not installed
             print(f"[warn] sentence-transformers unavailable ({exc!s:.80}); using TF-IDF fallback")
