@@ -1,7 +1,6 @@
-const API_BASE = "https://hemarshini-fitrank-api.hf.space";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const API = "/api";
+const API = "https://hemarshini-fitrank-api.hf.space";
 const PARTS = [
   ["skills", "Skills", "var(--c-skills)"],
   ["semantic", "Semantic fit", "var(--c-sem)"],
