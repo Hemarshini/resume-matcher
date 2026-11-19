@@ -56,20 +56,32 @@ Match % = 100 × ( 0.40·Skills + 0.30·Semantic + 0.20·Experience + 0.10·Educ
 Components the JD does not specify (e.g. no education stated) are dropped and the remaining weights are **renormalised**, so a candidate is never penalised for something the JD didn't ask.
 
 1. **Skills (40%)** – weighted coverage: required skill = 1.0, preferred = 0.5. **Core skills** (named in the job title or repeated through the JD, e.g. Java in a "Java Backend Engineer" role) weigh up to 2.5×, so a missing core language hurts more than a missing tool (marked ★ in the UI). Per skill the credit is
-   *exact/alias/implied match = 1.0* · *related technology (e.g. MySQL for PostgreSQL) = 0.5* · *embedding similarity ≥ 0.80 between skill names = 0.6* · *otherwise 0*.
+   *exact/alias/implied match = 1.0 (only 0.5 if the skill is merely listed and never shown in the work history)* · *related technology (e.g. MySQL for PostgreSQL) = 0.5* · *embedding similarity ≥ 0.80 between skill names = 0.6* · *otherwise 0*.
 2. **Semantic (30%)** – goes beyond keywords. `all-MiniLM-L6-v2` embeds the JD and resume. `raw = 0.35 × whole-document cosine + 0.65 × coverage`, where **coverage** = for each JD chunk, the cosine of its best-matching resume chunk, averaged. Chunking avoids the 256-token truncation of sentence transformers and checks that *every* JD requirement is addressed. Raw cosines of related text cluster in 0.15–0.60, so they are rescaled linearly to 0–1.
 3. **Relevant experience (20%)** – total years are scaled by a *relevance factor* = `0.6·skills + 0.4·semantic` (relevance ≥ 0.8 counts the years in full, lower values scale them down), then `min(relevant_years / required_years, 1)`. Six years as a Node.js developer therefore count for far less than six years of Java when the role is a Java role. No penalty for being over-qualified.
 4. **Education (10%)** – 1.0 if the level is met, 0.5 if one level below, else 0 (Diploma < Bachelor's < Master's < PhD).
 
-**Worked example** – JD needs 5 yrs, Bachelor's; skills 8/9 required (+ partial credit) → 0.88; semantic 0.62; experience 4 yrs → 0.8; education met → 1.0:
+**Worked example** – JD needs 5 yrs, Bachelor's; skills 8/9 required (+ partial credit) → 0.88; semantic 0.62; experience 4 relevant yrs → 0.8; education met → 1.0:
 `100 × (0.40·0.88 + 0.30·0.62 + 0.20·0.80 + 0.10·1.0) = 79.8%`
 
 **Explainability** – every number in the UI is traceable: the stacked bar shows the points each component contributed, the reasons list is generated from the sub-scores, and the "Strongest evidence / Least covered" panel shows the actual JD sentence matched to the resume sentence that satisfied it (or didn't).
 
 ## Beyond the brief: what makes the scoring trustworthy
 
-1. **Claimed vs demonstrated skills.** A skill listed in the Skills section but never mentioned in the work history earns **50%** credit (shown as "listed only"). This defends against keyword stuffing: the bundled *Kavya Reddy* resume lists 14 JD keywords with 1 year of clerical experience; a pure keyword matcher would rank her near the top, while the hybrid scorer places her below the genuine senior Java candidates.
-2. **Validation harness** (`backend/app/evaluation.py`, `GET /api/evaluate`, "Validation" button). Graded relevance labels (`sample_ground_truth.json`) are scored with **NDCG@5, Spearman ρ and pairwise ordering accuracy** against baselines (keyword overlap, whole-document similarity) and single components (ablation). The benchmark deliberately includes a keyword stuffer and a paraphraser. Weights are tuned by grid search with **2-fold cross-validation** (fit on one half, evaluate on the other) to avoid reporting in-sample numbers. Results with the real `all-MiniLM-L6-v2` model on the 14-resume benchmark:
+Beyond matching, the project checks that its scores can be trusted and explains where they come from.
+
+### 1. Claimed vs demonstrated skills
+A skill listed in the Skills section but never mentioned in the work history earns only **50%** credit (shown as "listed only"). This defends against keyword stuffing: the bundled *Kavya Reddy* resume lists 14 JD keywords with 1 year of clerical experience. A pure keyword matcher would rank her near the top; the hybrid scorer places her below the genuine senior Java candidates.
+
+### 2. Validation harness
+Code: `backend/app/evaluation.py`, `GET /api/evaluate`, and the **Validation** button in the UI.
+
+* Graded relevance labels (`sample_ground_truth.json`) are compared with the system's ranking using **NDCG@5**, **Spearman ρ** and **pairwise ordering accuracy**.
+* The system is compared against baselines (keyword overlap, whole-document similarity) and single components (ablation).
+* The benchmark deliberately includes a keyword stuffer and a candidate who paraphrases instead of using the JD's keywords.
+* Weight tuning uses grid search with **2-fold cross-validation**: fit on one half of the resumes, evaluate on the other, so no number is reported in-sample.
+
+Results with the real `all-MiniLM-L6-v2` model on the 14-resume benchmark:
 
 | Method | NDCG@5 | Spearman | Pairwise |
 |---|---|---|---|
@@ -79,14 +91,27 @@ Components the JD does not specify (e.g. no education stated) are dropped and th
 | Semantic component only | 0.82 | 0.69 | 86% |
 | **Hybrid (default weights)** | **0.97** | **0.94** | **97%** |
 
-The hybrid clearly beats both baselines: against keyword overlap NDCG@5 is 0.97 vs 0.75 and Spearman 0.94 vs 0.60; against whole-document similarity (a strong baseline) NDCG@5 is 0.97 vs 0.70 and Spearman 0.94 vs 0.83. NDCG@5 measures the quality of the top of the list, which is what recruiters actually read. Grid-searched weights (skills 20 / semantic 10 / experience 10 / education 60) fitted on one half **scored worse on the other half** (Spearman 0.77 vs 0.89), so they overfit; the hand-set defaults were deliberately kept.
+What the numbers show:
 
-**Honest note:** the scorer was refined (relevant-experience scaling, core-skill weighting; before them the hybrid scored NDCG@5 0.84 / Spearman 0.86) after inspecting failures on this same 14-resume benchmark, so these are development-set numbers and are optimistic. A second, untouched benchmark with a different job description is the right next step. The Validation view always evaluates this bundled benchmark, not the files you upload.
-3. **Blind screening** (checkbox). Names, emails, phones, gendered words and protected-attribute lines (gender, DOB, marital status…) are removed *before* scoring and hidden in the UI. The fairness check re-scores every resume with five different names: with blind screening on the score change is exactly **0.0** (versus up to 2.2 points in standard mode with the real embedding model).
-4. **Counterfactual "what-if".** For each gap we compute exactly how many points closing it would add ("Docker: +4.4 pts"), turning the score into actionable feedback.
-5. **Live weight sliders.** Recruiters re-weight skills / semantics / experience / education per role and the ranking updates instantly; component scores are returned by the API, so no re-computation is needed.
+* The hybrid beats both baselines. Against keyword overlap, NDCG@5 is 0.97 vs 0.75 and Spearman 0.94 vs 0.60. Against whole-document similarity (a strong baseline), NDCG@5 is 0.97 vs 0.70 and Spearman 0.94 vs 0.83.
+* NDCG@5 measures the quality of the top of the list, which is what recruiters actually read.
+* Grid-searched weights (skills 20 / semantic 10 / experience 10 / education 60) **scored worse on held-out data** (Spearman 0.77 vs 0.89), so they overfit. The hand-set defaults (40/30/20/10) were deliberately kept.
 
-6. **Recruiter summaries.** "Write recruiter summary" in the candidate panel asks Claude for a neutral 3–4 sentence assessment plus an interview focus. The model receives **only the structured scoring facts** (never the raw resume), which prevents invented experience and keeps blind mode blind. Without `ANTHROPIC_API_KEY`, or on any API error, a deterministic template is used, so the feature never breaks.
+> **Honest note.** The scorer was refined (relevant-experience scaling and core-skill weighting; before them the hybrid scored NDCG@5 0.84 / Spearman 0.86) after inspecting failures on this same 14-resume benchmark. These are therefore development-set numbers and are optimistic. A second, untouched benchmark with a different job description is the right next step. The Validation view always evaluates this bundled benchmark, not the files you upload.
+
+### 3. Blind screening and fairness check
+A checkbox removes names, emails, phone numbers, gendered words and protected-attribute lines (gender, date of birth, marital status, etc.) *before* scoring, and hides them in the UI.
+
+The fairness check re-scores every resume with five different names. With blind screening on, the score change is exactly **0.0**; in standard mode it is up to **2.2 points** with the real embedding model.
+
+### 4. Counterfactual "what-if"
+For each gap, the app computes how many points closing it would add (for example "Docker: +4.4 pts"), turning the score into actionable feedback.
+
+### 5. Live weight sliders
+Recruiters re-weight skills, semantics, experience and education per role, and the ranking updates instantly. The API returns the component scores, so no re-computation on the server is needed.
+
+### 6. Recruiter summaries
+"Write recruiter summary" in the candidate panel asks Claude for a neutral 3-4 sentence assessment plus an interview focus. The model receives **only the structured scoring facts**, never the raw resume, which prevents invented experience and keeps blind mode blind. Without `ANTHROPIC_API_KEY`, or on any API error, a deterministic template is used, so the feature never breaks.
 
 ## Limitations & next steps
 
