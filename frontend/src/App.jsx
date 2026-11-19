@@ -1,3 +1,4 @@
+const API_BASE = "https://hemarshini-fitrank-api.hf.space";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const API = "/api";
