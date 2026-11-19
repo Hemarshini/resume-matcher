@@ -18,8 +18,6 @@ cd frontend && npm install && npm run dev                # http://localhost:5173
 Click **Try with sample data** for an instant demo, or upload your own JD + resumes. Tests: `cd backend && pytest`.
 If `sentence-transformers` cannot load (offline), the engine automatically falls back to TF-IDF so the app still runs; the UI shows which model is active.
 
-**Docker (one command):** `docker compose up --build`, then open http://localhost:8080. Set `ANTHROPIC_API_KEY` in your environment first if you want Claude-written summaries.
-
 ## Architecture
 
 ```
