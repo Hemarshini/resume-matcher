@@ -26,11 +26,15 @@ HEADINGS = {
     "projects": r"(personal )?projects?",
     "other": r"certifications?|achievements?|awards?|publications?|languages|interests|references|hobbies",
 }
-RANGE = re.compile(
-    rf"(?:\b({MON})[a-z]*\.?,?\s+)?\b((?:19|20)\d{{2}})\s*(?:-|–|—|to|until)\s*"
-    rf"(?:(?:\b({MON})[a-z]*\.?,?\s+)?\b((?:19|20)\d{{2}})\b|(present|current|now|ongoing|till date))",
-    re.I,
-)
+MONTH = r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+YEAR4 = r"(?:19|20)\d{2}"
+# Date tokens: "Mar 2021", "March, 2021", "Jan'19", "03/2021", "03-2021", "2021-03", "2021"
+TOKEN = rf"(?:{MONTH}\.?,?\s*(?:{YEAR4}|'\s?\d{{2}})|(?:0?[1-9]|1[0-2])[/.\-]{YEAR4}|{YEAR4}[/.\-](?:0?[1-9]|1[0-2])(?!\d)|{YEAR4})"
+PRESENT = r"(?:till date|to date|till now|till present|present|current|now|ongoing|today)"
+SEP = r"\s*(?:-|–|—|\bto\b|\buntil\b|\btill\b|\bthrough\b)\s*"
+RANGE = re.compile(rf"(?<![A-Za-z0-9/])(?P<s>{TOKEN}){SEP}(?:(?P<e>{TOKEN})|(?P<p>{PRESENT}))(?![A-Za-z0-9])", re.I)
+SINCE = re.compile(rf"\bsince\s+(?P<s>{TOKEN})", re.I)
+EDU_CTX = re.compile("|".join(pat for _, pat in EDU_PATTERNS) + r"|\b(university|college|institute|school|academy|polytechnic)\b", re.I)
 
 
 # ---------------------------------------------------------------- extraction
@@ -53,11 +57,48 @@ def _docx_text(data: bytes) -> str:
     return "\n".join(lines)
 
 
+def _gutter(words: list, width: float):
+    """x-position of an empty vertical channel between two text columns, or None for single-column pages."""
+    n = int(width) + 2
+    cover = [0] * n
+    for w in words:
+        for x in range(int(w["x0"]), min(int(w["x1"]) + 1, n)):
+            cover[x] += 1
+    lo, hi, best, run = int(n * 0.25), int(n * 0.75), None, 0
+    for x in range(lo, hi + 1):
+        if x < hi and cover[x] == 0:
+            run += 1
+            continue
+        if run >= 10 and (best is None or run > best[1] - best[0]):
+            best = (x - run, x)
+        run = 0
+    if not best:
+        return None
+    mid = (best[0] + best[1]) / 2
+    left = sum(1 for w in words if w["x1"] <= mid)
+    right = sum(1 for w in words if w["x0"] >= mid)
+    ok = left >= 0.15 * len(words) and right >= 0.15 * len(words) and left + right >= 0.95 * len(words)
+    return mid if ok else None
+
+
+def _page_text(page) -> str:
+    """Two-column layouts are read column by column instead of line by line (which would interleave them)."""
+    try:
+        words = page.extract_words()
+        mid = _gutter(words, page.width) if len(words) > 30 else None
+        if mid:
+            cols = (page.within_bbox((0, 0, mid, page.height)).extract_text(), page.within_bbox((mid, 0, page.width, page.height)).extract_text())
+            return "\n".join(c for c in cols if c)
+    except Exception:
+        pass
+    return page.extract_text() or ""
+
+
 def _pdf_text(data: bytes) -> str:
     try:
         import pdfplumber
         with pdfplumber.open(io.BytesIO(data)) as pdf:
-            return "\n".join((p.extract_text() or "") for p in pdf.pages)
+            return "\n".join(_page_text(p) for p in pdf.pages)
     except Exception:  # pdfplumber missing or blocked -> pure-Python reader
         from pypdf import PdfReader
         return "\n".join((pg.extract_text() or "") for pg in PdfReader(io.BytesIO(data)).pages)
@@ -106,27 +147,59 @@ def split_sections(text: str) -> dict[str, str]:
 
 
 # ------------------------------------------------------------------ helpers
+def _parse_token(tok: str, today: dt.date):
+    t = tok.strip().lower()
+    m = re.fullmatch(rf"({MONTH})\.?,?\s*(?:({YEAR4})|'\s?(\d{{2}}))", t)
+    if m:
+        yy = int(m.group(2)) if m.group(2) else 2000 + int(m.group(3))
+        if yy > today.year + 1:
+            yy -= 100
+        return yy, MONTHS[m.group(1)[:3]]
+    m = re.fullmatch(rf"(\d{{1,2}})[/.\-]({YEAR4})", t)
+    if m:
+        return int(m.group(2)), int(m.group(1))
+    m = re.fullmatch(rf"({YEAR4})[/.\-](\d{{1,2}})", t)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    return int(t), None
+
+
 def compute_years(exp_text: str) -> float:
-    """Union of all 'Mon YYYY - Mon YYYY/Present' ranges, so overlaps are not double counted."""
+    """Union of all date ranges found (any supported format), so overlaps are not double counted.
+    Ranges on education lines are ignored, which matters for resumes without section headings."""
     today = dt.date.today()
     now = today.year * 12 + today.month
-    spans = []
-    for m in RANGE.finditer(exp_text):
-        m1, y1, m2, y2, pres = m.groups()
-        s = int(y1) * 12 + (MONTHS[m1.lower()[:3]] if m1 else 1)
-        e = now if pres else int(y2) * 12 + (MONTHS[m2.lower()[:3]] if m2 else 1)
-        e = min(e, now)
-        if e >= s and int(y1) >= 1970:
-            spans.append((s, e))
+    spans, prev = [], ""
+    for raw in exp_text.replace("’", "'").replace("‘", "'").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        for m in [*RANGE.finditer(line), *SINCE.finditer(line)]:
+            date_only = len(line) - len(m.group(0)) < 8        # the date sits on its own line
+            if EDU_CTX.search(line + (" " + prev if date_only else "")):
+                continue
+            sy, sm = _parse_token(m.group("s"), today)
+            s = sy * 12 + (sm or 1)
+            if "e" not in m.groupdict() or not (m.group("e") or m.group("p")):
+                e = now                                           # "since 2019"
+            elif m.group("p"):
+                e = now
+            else:
+                ey, em = _parse_token(m.group("e"), today)
+                e = ey * 12 + (em or 1)
+            e = min(e, now)
+            if sy >= 1970 and e >= s:
+                spans.append((s, e))
+        prev = line
     spans.sort()
     total, cs, ce = 0, None, None
-    for s, e in spans:
-        if ce is None or s > ce:
+    for a, b in spans:
+        if ce is None or a > ce:
             if ce is not None:
                 total += ce - cs
-            cs, ce = s, e
+            cs, ce = a, b
         else:
-            ce = max(ce, e)
+            ce = max(ce, b)
     if ce is not None:
         total += ce - cs
     return round(total / 12, 1)
@@ -146,14 +219,20 @@ def education_level(text: str, lowest: bool = False):
     return min(levels) if lowest else max(levels)
 
 
+ROLE_WORDS = re.compile(r"engineer|developer|analyst|manager|designer|scientist|consultant|architect|intern|specialist|administrator|lead|senior|junior|executive|summary|experience|education|skills", re.I)
+
+
 def guess_name(lines: list[str]) -> str | None:
-    for l in lines[:6]:
+    for l in lines[:8]:
         s = l.strip()
-        if not s or "@" in s or re.search(r"\d", s) or re.search(r"resume|curriculum|vitae|\bcv\b", s, re.I):
+        # header lines like "PRIYA SHARMA | priya@x.com | +91 ..." -> look at the first segment only
+        cand = re.split(r"\s*[|•·,]\s*", s)[0] if re.search(r"[|•·@\d]", s) else s
+        cand = re.sub(r"\s+(summary|profile|objective|experience|education|skills|projects)\s*$", "", cand, flags=re.I)  # merged columns
+        if not cand or "@" in cand or re.search(r"\d", cand) or re.search(r"resume|curriculum|vitae|\bcv\b|profile|contact", cand, re.I) or ROLE_WORDS.search(cand):
             continue
-        w = s.split()
+        w = cand.split()
         if 2 <= len(w) <= 4 and all(re.fullmatch(r"[A-Za-z.'\-]+", x) for x in w):
-            return s.title() if s.isupper() else s
+            return cand.title() if cand.isupper() else cand
     return None
 
 
@@ -164,7 +243,7 @@ def parse_resume(text: str, filename: str = "") -> dict:
     name = guess_name(lines)
     title = None
     if name:
-        i = next((k for k, l in enumerate(lines[:6]) if l.strip().lower() == name.lower()), None)
+        i = next((k for k, l in enumerate(lines[:8]) if l.strip().lower().startswith(name.lower())), None)
         if i is not None and i + 1 < len(lines):
             c = lines[i + 1].strip()
             if len(c.split()) <= 8 and "@" not in c and not re.search(r"\d{4}", c):

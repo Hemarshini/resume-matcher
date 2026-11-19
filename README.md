@@ -37,11 +37,14 @@ React (Vite)  ──/api──▶  FastAPI
 | `GET /api/sessions/{id}` | ranked list for a past analysis |
 | `GET /api/sessions/{id}/candidates/{cid}` | full candidate analysis incl. parsed text |
 
+**Storage:** SQLite (zero-config, a single table of JSON analysis sessions in `store.py`). The assignment lists PostgreSQL/MongoDB as preferred, not required; moving to either only means re-implementing the two functions `save`/`load`.
+
 ## Parsing
 
 * **Text:** `pdfplumber` (PDF), `python-docx` (paragraphs + tables).
 * **Sections:** headings (Summary / Experience / Education / Skills…) are detected so dates in *Education* are not counted as work experience.
-* **Experience:** every `Mon YYYY – Mon YYYY/Present` range in the Experience section is converted to months and **merged as a union**, so overlapping jobs aren't double-counted. Falls back to "N years of experience" statements.
+* **Experience:** all date ranges in the work history are converted to months and **merged as a union**, so overlapping jobs and freelance work aren't double-counted. Supported formats: `Mar 2021`, `March, 2021`, `Sept. 2015`, `Jan'19`, `03/2021`, `03-2021`, `2021-03`, bare years, `Present / Current / Till date / Since 2019`. Ranges on education lines are ignored even when the resume has no headings. Falls back to "N years of experience" statements.
+* **Layouts:** two-column PDFs are detected by an empty vertical gutter and read column by column; header lines like `NAME | email | phone` and names that are not on the first line are handled. Parser accuracy is regression-tested on 8 deliberately messy resumes (`sample_resumes_messy/`, `backend/tests/test_messy.py`).
 * **Skills:** word-boundary regex over the taxonomy (`java` never matches `javascript`; `Postgres` → PostgreSQL). Implied skills are added (Spring Boot ⇒ Java).
 * **JD:** skills under a *Preferred / Nice to have* heading (or marked "is a plus") are **preferred**, all others **required**; minimum years and education level are extracted by regex.
 
@@ -88,7 +91,7 @@ The hybrid clearly beats both baselines: against keyword overlap NDCG@5 is 0.97 
 ## Limitations & next steps
 
 * The evaluation set is small and synthetic, so it demonstrates the *method*; defaults are a prior and should be refit on real recruiter labels.
-* Experience parsing is heuristic (numeric dates like `03/2021`, career gaps and multi-column PDFs are weak spots); the skills taxonomy is finite — an NER model or LLM extraction would widen coverage.
+* Parsing is heuristic (unusual date wording, header lines that span two columns, tables and text inside images are still weak spots); the skills taxonomy is finite — an NER model or LLM extraction would widen coverage.
 * Scanned PDFs need OCR. Scores are a decision aid, not an automated hiring decision: review for bias before real use.
 * Possible extensions: cross-encoder re-ranking, LLM-written summaries, bias-masking of names, PostgreSQL storage.
 

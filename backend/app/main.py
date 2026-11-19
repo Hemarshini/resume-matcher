@@ -42,7 +42,7 @@ def analyze(jd_text: str, files: list[tuple[str, bytes]], blind: bool = False) -
     for i, (fname, data) in enumerate(files):
         try:
             text = extract_text(fname, data)
-            if len(text.split()) < 40:
+            if len(text.split()) < 15:
                 raise ValueError(f"only {len(text.split())} words of text, which is too little for a resume")
             info = parse_resume(text, fname)
             if not info["skills"] and not info["email"] and not info["years"]:

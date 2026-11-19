@@ -135,10 +135,19 @@ def _compile():
 
 _PATTERNS = _compile()
 
+# Ordinary English words that are also tech names: matched only in their capitalised form
+# ("Spark" in a skills list, not "a spark of ..."; "Excel" but not "excel at")
+CASED = {
+    "Spark": re.compile(r"(?<![\w+#.])Spark(?![\w+#])"),
+    "Excel": re.compile(r"(?<![\w+#.])Excel(?![\w+#])(?!\s+(?:at|in|with|as|on)\b)"),
+}
+
 
 def extract_skills(text: str, add_implied: bool = False) -> list[str]:
     low = text.lower()
     hits = [(m.start(), n) for n, p in _PATTERNS if (m := p.search(low))]
+    have = {n for _, n in hits}
+    hits += [(m.start(), n) for n, p in CASED.items() if n not in have and (m := p.search(text))]
     found = [n for _, n in sorted(hits)]
     if add_implied:
         for n in list(found):

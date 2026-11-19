@@ -1,0 +1,180 @@
+{
+ "01_numeric_dates.pdf": {
+  "name": "Priya Sharma",
+  "spans": [
+   [
+    2021,
+    3,
+    null,
+    null
+   ],
+   [
+    2018,
+    6,
+    2021,
+    2
+   ]
+  ],
+  "skills": [
+   "Java",
+   "Spring Boot",
+   "PostgreSQL",
+   "Docker"
+  ],
+  "edu": 2
+ },
+ "02_apostrophe_iso.docx": {
+  "name": "Rahul Verma",
+  "spans": [
+   [
+    2019,
+    1,
+    2021,
+    3
+   ],
+   [
+    2021,
+    4,
+    null,
+    null
+   ]
+  ],
+  "skills": [
+   "Python",
+   "SQL",
+   "Spark",
+   "AWS"
+  ],
+  "edu": null
+ },
+ "03_flat_no_headings.docx": {
+  "name": "Sneha Rao",
+  "spans": [
+   [
+    2017,
+    1,
+    2019,
+    12
+   ],
+   [
+    2020,
+    1,
+    null,
+    null
+   ]
+  ],
+  "skills": [
+   "React",
+   "Node.js",
+   "MongoDB",
+   "Docker"
+  ],
+  "edu": 2
+ },
+ "04_stated_only.pdf": {
+  "name": "Karthik Menon",
+  "stated": 8.0,
+  "skills": [
+   "Python",
+   "Django",
+   "PostgreSQL",
+   "Docker"
+  ],
+  "edu": null
+ },
+ "06_overlap_and_gap.docx": {
+  "name": "Arjun Kapoor",
+  "spans": [
+   [
+    2020,
+    6,
+    2023,
+    6
+   ],
+   [
+    2019,
+    1,
+    2021,
+    12
+   ],
+   [
+    2024,
+    3,
+    null,
+    null
+   ]
+  ],
+  "skills": [
+   "Java",
+   "MySQL",
+   "Git"
+  ],
+  "edu": null
+ },
+ "07_month_names.pdf": {
+  "name": "Neha Bansal",
+  "spans": [
+   [
+    2018,
+    9,
+    null,
+    null
+   ],
+   [
+    2015,
+    9,
+    2018,
+    8
+   ]
+  ],
+  "skills": [
+   "Selenium",
+   "Python",
+   "Agile",
+   "Jenkins"
+  ],
+  "edu": null
+ },
+ "08_name_not_first.docx": {
+  "name": "Ananya Iyer",
+  "spans": [
+   [
+    2019,
+    4,
+    null,
+    null
+   ]
+  ],
+  "skills": [
+   "Python",
+   "Machine Learning",
+   "TensorFlow",
+   "SQL"
+  ],
+  "edu": null
+ },
+ "05_two_column.pdf": {
+  "name": "Divya Nair",
+  "spans": [
+   [
+    2020,
+    3,
+    null,
+    null
+   ],
+   [
+    2016,
+    7,
+    2020,
+    2
+   ]
+  ],
+  "skills": [
+   "Java",
+   "Spring Boot",
+   "PostgreSQL",
+   "Docker"
+  ],
+  "edu": 2
+ }
+}
